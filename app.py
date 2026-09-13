@@ -111,20 +111,22 @@ if not df_cash.empty:
 
     st.markdown("---")
 
-    # Multi-Tab Excel Export Function (Summary & Detail Sheets)
+    # Multi-Tab Excel Export Function with Clear Headers
     def convert_df_to_excel(df):
         output = io.BytesIO()
         detail_df = df[["Date", "Collector", "Customer", "Payment_Type", "Cheque_No", "Amount"]].sort_values(by="Date", ascending=False)
+        detail_df.columns = ["Collection Date", "Collector Name", "Customer Name", "Payment Type", "Cheque No.", "Amount (MMK)"]
+        
         summary_df = df.groupby(["Year", "Week", "Collector", "Customer", "Payment_Type"])["Amount"].sum().reset_index()
         summary_df.columns = ["Year", "Week No.", "Collector Name", "Customer Name", "Payment Type", "Total Amount (MMK)"]
 
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            summary_df.to_excel(writer, index=False, sheet_name='Weekly_Summary')
-            detail_df.to_excel(writer, index=False, sheet_name='Daily_Details')
+            summary_df.to_excel(writer, index=False, sheet_name='Weekly_Summary', header=True)
+            detail_df.to_excel(writer, index=False, sheet_name='Daily_Details', header=True)
             
         return output.getvalue()
 
-    # Fixed PDF Generator Function (Safe Date Handling)
+    # Fixed PDF Generator Function (Correct Binary Stream Output)
     def generate_pdf_report(df):
         pdf = FPDF(orientation='P', unit='mm', format='A4')
         pdf.add_page()
@@ -133,6 +135,7 @@ if not df_cash.empty:
         pdf.set_font("Arial", size=10)
         pdf.ln(5)
         
+        # Table Headers
         pdf.set_font("Arial", 'B', 9)
         pdf.cell(25, 8, "Date", 1, 0, 'C')
         pdf.cell(35, 8, "Collector", 1, 0, 'C')
@@ -141,21 +144,28 @@ if not df_cash.empty:
         pdf.cell(30, 8, "Cheque No", 1, 0, 'C')
         pdf.cell(35, 8, "Amount (MMK)", 1, 1, 'C')
         
+        # Table Data
         pdf.set_font("Arial", size=9)
         for _, row in df.iterrows():
-            # Safe String conversion for Date
             date_str = str(row['Date'])[:10] if pd.notna(row['Date']) else "-"
-            pdf.cell(25, 7, str(date_str), 1)
-            pdf.cell(35, 7, str(row['Collector'])[:18], 1)
-            pdf.cell(45, 7, str(row['Customer'])[:23], 1)
-            pdf.cell(20, 7, str(row['Payment_Type']), 1, 0, 'C')
-            pdf.cell(30, 7, str(row['Cheque_No']), 1, 0, 'C')
-            pdf.cell(35, 7, f"{row['Amount']:,}", 1, 1, 'R')
+            collector_str = str(row['Collector'])[:18]
+            customer_str = str(row['Customer'])[:23]
+            pay_type_str = str(row['Payment_Type'])
+            cheque_str = str(row['Cheque_No'])
+            amt_str = f"{row['Amount']:,}"
+
+            pdf.cell(25, 7, date_str, 1, 0, 'C')
+            pdf.cell(35, 7, collector_str, 1, 0, 'L')
+            pdf.cell(45, 7, customer_str, 1, 0, 'L')
+            pdf.cell(20, 7, pay_type_str, 1, 0, 'C')
+            pdf.cell(30, 7, cheque_str, 1, 0, 'C')
+            pdf.cell(35, 7, amt_str, 1, 1, 'R')
             
-        out = pdf.output()
-        if isinstance(out, str):
-            return out.encode('latin-1', errors='replace')
-        return bytes(out)
+        # Return proper bytes using String stream output
+        pdf_str = pdf.output(dest='S')
+        if isinstance(pdf_str, str):
+            return pdf_str.encode('latin-1', errors='replace')
+        return bytes(pdf_str)
 
     # Export Buttons
     st.subheader("📥 Export Reports (Excel Multi-Sheet / A4 PDF)")
@@ -202,4 +212,4 @@ if not df_cash.empty:
 
 else:
     st.info("💡 လက်ရှိတွင် အချက်အလက် စာရင်းများ မရှိသေးပါ၊ Sidebar က Data Entry Form တွင် စာရင်းသစ် စတင်ထည့်သွင်းနိုင်ပါသည်။")
-        
+    
