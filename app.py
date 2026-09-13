@@ -122,42 +122,32 @@ if not df_cash.empty:
 
     st.markdown("---")
 
-    # High-Quality Styled Excel Export Function with Subtotals and Header Formatting
+    # Excel Export Function
     def convert_df_to_excel(df):
         wb = openpyxl.Workbook()
-        wb.remove(wb.active) # Remove default sheet
+        wb.remove(wb.active)
 
-        # Styling definitions
         header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
-        header_fill = PatternFill(start_color="1F497D", end_color="1F497D", fill_type="solid") # Dark Navy
-        
+        header_fill = PatternFill(start_color="1F497D", end_color="1F497D", fill_type="solid")
         title_font = Font(name="Calibri", size=14, bold=True, color="1F497D")
         sub_title_font = Font(name="Calibri", size=10, italic=True, color="595959")
-        
         subtotal_font = Font(name="Calibri", size=11, bold=True)
         subtotal_fill = PatternFill(start_color="F2F2F2", end_color="F2F2F2", fill_type="solid")
         grand_total_fill = PatternFill(start_color="DCE6F1", end_color="DCE6F1", fill_type="solid")
         
         thin_border = Border(
-            left=Side(style='thin', color='D9D9D9'),
-            right=Side(style='thin', color='D9D9D9'),
-            top=Side(style='thin', color='D9D9D9'),
-            bottom=Side(style='thin', color='D9D9D9')
+            left=Side(style='thin', color='D9D9D9'), right=Side(style='thin', color='D9D9D9'),
+            top=Side(style='thin', color='D9D9D9'), bottom=Side(style='thin', color='D9D9D9')
         )
         total_top_border = Side(style='thin', color='000000')
         total_bottom_border = Side(style='double', color='000000')
         grand_total_border = Border(top=total_top_border, bottom=total_bottom_border)
 
-        # -------------------------------------------------------------
         # SHEET 1: Daily_Details
-        # -------------------------------------------------------------
         ws_detail = wb.create_sheet(title="Daily_Details")
-        
-        # Main Title Banner inside Sheet
         ws_detail.cell(row=1, column=1, value="💵 Daily Collection Detail Report").font = title_font
         ws_detail.cell(row=2, column=1, value="Generated from ERP Daily Collection System").font = sub_title_font
         
-        # Table Headers
         headers_detail = ["Collection Date", "Collector Name", "Customer Name", "Payment Type", "Cheque No.", "Amount (MMK)"]
         header_row_idx = 4
         for col_idx, h_text in enumerate(headers_detail, 1):
@@ -166,7 +156,6 @@ if not df_cash.empty:
             cell.fill = header_fill
             cell.alignment = Alignment(horizontal="center" if col_idx < 6 else "right", vertical="center")
 
-        # Table Data
         detail_df = df[["Date", "Collector", "Customer", "Payment_Type", "Cheque_No", "Amount"]].sort_values(by="Date", ascending=False)
         start_row = 5
         for row_idx, r_data in enumerate(detail_df.itertuples(index=False), start=start_row):
@@ -185,7 +174,6 @@ if not df_cash.empty:
 
         end_row = start_row + len(detail_df) - 1
 
-        # Subtotals & Grand Total Rows
         subtotal_cash_row = end_row + 2
         ws_detail.cell(row=subtotal_cash_row, column=5, value="Total Cash Collected:").font = subtotal_font
         ws_detail.cell(row=subtotal_cash_row, column=5).alignment = Alignment(horizontal="right")
@@ -212,11 +200,8 @@ if not df_cash.empty:
         gt_sum_cell.border = grand_total_border
         ws_detail.cell(row=grand_total_row, column=5).border = grand_total_border
 
-        # -------------------------------------------------------------
         # SHEET 2: Weekly_Summary
-        # -------------------------------------------------------------
         ws_summary = wb.create_sheet(title="Weekly_Summary")
-        
         ws_summary.cell(row=1, column=1, value="💵 Weekly Settlement Summary").font = title_font
         ws_summary.cell(row=2, column=1, value="Grouped by Year, Week, Collector & Customer").font = sub_title_font
         
@@ -244,8 +229,6 @@ if not df_cash.empty:
                 ws_summary.cell(row=row_idx, column=c).border = thin_border
 
         s_end_row = s_start_row + len(summary_df) - 1
-        
-        # Summary Grand Total Row
         s_gt_row = s_end_row + 2
         ws_summary.cell(row=s_gt_row, column=5, value="Grand Total:").font = subtotal_font
         ws_summary.cell(row=s_gt_row, column=5).alignment = Alignment(horizontal="right")
@@ -256,7 +239,6 @@ if not df_cash.empty:
         s_gt_sum_cell.border = grand_total_border
         ws_summary.cell(row=s_gt_row, column=5).border = grand_total_border
 
-        # Adjust Column Widths dynamically for both sheets
         for sheet in [ws_detail, ws_summary]:
             for col in sheet.columns:
                 max_len = 0
@@ -270,28 +252,33 @@ if not df_cash.empty:
         wb.save(output)
         return output.getvalue()
 
-    # Fixed PDF Generator Function with Summary Totals Section
+    # Enhanced PDF Generator Function (Includes both Daily Details & Weekly Settlement Summary)
     def generate_pdf_report(df):
         pdf = FPDF(orientation='P', unit='mm', format='A4')
         pdf.add_page()
         
-        # Header Title
-        pdf.set_font("Arial", 'B', 16)
-        pdf.cell(0, 10, "Daily Collection & Settlement Report (A4)", ln=True, align='C')
-        pdf.set_font("Arial", size=10)
-        pdf.ln(3)
+        # Title Banner with Emoji Title
+        pdf.set_font("Arial", 'B', 15)
+        pdf.cell(0, 10, "Daily Collection & Weekly Settlement Report (A4)", ln=True, align='C')
+        pdf.set_font("Arial", size=9)
+        pdf.cell(0, 5, "Generated by ERP Collection System", ln=True, align='C')
+        pdf.ln(5)
+        
+        # SECTION 1: Daily Collection Logs Table
+        pdf.set_font("Arial", 'B', 11)
+        pdf.cell(0, 7, "1. Daily Collection Transactions", 0, 1, 'L')
         
         # Table Headers
         pdf.set_font("Arial", 'B', 9)
-        pdf.cell(25, 8, "Date", 1, 0, 'C')
-        pdf.cell(35, 8, "Collector", 1, 0, 'C')
-        pdf.cell(45, 8, "Customer", 1, 0, 'C')
-        pdf.cell(20, 8, "Type", 1, 0, 'C')
-        pdf.cell(30, 8, "Cheque No", 1, 0, 'C')
-        pdf.cell(35, 8, "Amount (MMK)", 1, 1, 'C')
+        pdf.cell(25, 7, "Date", 1, 0, 'C')
+        pdf.cell(35, 7, "Collector", 1, 0, 'C')
+        pdf.cell(45, 7, "Customer", 1, 0, 'C')
+        pdf.cell(20, 7, "Type", 1, 0, 'C')
+        pdf.cell(30, 7, "Cheque No", 1, 0, 'C')
+        pdf.cell(35, 7, "Amount (MMK)", 1, 1, 'C')
         
         # Table Data
-        pdf.set_font("Arial", size=9)
+        pdf.set_font("Arial", size=8.5)
         for _, row in df.iterrows():
             date_str = str(row['Date'])[:10] if pd.notna(row['Date']) else "-"
             collector_str = str(row['Collector'])[:18]
@@ -300,34 +287,58 @@ if not df_cash.empty:
             cheque_str = str(row['Cheque_No'])
             amt_str = f"{row['Amount']:,.0f}"
 
-            pdf.cell(25, 7, date_str, 1, 0, 'C')
-            pdf.cell(35, 7, collector_str, 1, 0, 'L')
-            pdf.cell(45, 7, customer_str, 1, 0, 'L')
-            pdf.cell(20, 7, pay_type_str, 1, 0, 'C')
-            pdf.cell(30, 7, cheque_str, 1, 0, 'C')
-            pdf.cell(35, 7, amt_str, 1, 1, 'R')
+            pdf.cell(25, 6, date_str, 1, 0, 'C')
+            pdf.cell(35, 6, collector_str, 1, 0, 'L')
+            pdf.cell(45, 6, customer_str, 1, 0, 'L')
+            pdf.cell(20, 6, pay_type_str, 1, 0, 'C')
+            pdf.cell(30, 6, cheque_str, 1, 0, 'C')
+            pdf.cell(35, 6, amt_str, 1, 1, 'R')
             
-        # Summary Section at Bottom of PDF
-        pdf.ln(6)
+        pdf.ln(5)
+        
+        # SECTION 2: Weekly Summary Table inside PDF
+        pdf.set_font("Arial", 'B', 11)
+        pdf.cell(0, 7, "2. Weekly Settlement Summary Table", 0, 1, 'L')
+        
+        summary_pdf_df = df.groupby(["Year", "Week", "Collector", "Customer", "Payment_Type"])["Amount"].sum().reset_index()
+        
+        pdf.set_font("Arial", 'B', 9)
+        pdf.cell(15, 7, "Year", 1, 0, 'C')
+        pdf.cell(20, 7, "Week No.", 1, 0, 'C')
+        pdf.cell(40, 7, "Collector", 1, 0, 'C')
+        pdf.cell(50, 7, "Customer", 1, 0, 'C')
+        pdf.cell(25, 7, "Type", 1, 0, 'C')
+        pdf.cell(40, 7, "Total Amount (MMK)", 1, 1, 'C')
+        
+        pdf.set_font("Arial", size=8.5)
+        for _, w_row in summary_pdf_df.iterrows():
+            pdf.cell(15, 6, str(w_row['Year']), 1, 0, 'C')
+            pdf.cell(20, 6, f"W-{w_row['Week']}", 1, 0, 'C')
+            pdf.cell(40, 6, str(w_row['Collector'])[:20], 1, 0, 'L')
+            pdf.cell(50, 6, str(w_row['Customer'])[:25], 1, 0, 'L')
+            pdf.cell(25, 6, str(w_row['Payment_Type']), 1, 0, 'C')
+            pdf.cell(40, 6, f"{w_row['Amount']:,.0f}", 1, 1, 'R')
+
+        # SECTION 3: Summary Totals at Bottom
+        pdf.ln(5)
         pdf.set_font("Arial", 'B', 10)
-        pdf.cell(0, 7, "Collection Summary Totals:", 0, 1, 'L')
+        pdf.cell(0, 7, "Collection Overall Totals:", 0, 1, 'L')
         
         c_val = df[df["Payment_Type"] == "Cash"]["Amount"].sum()
         q_val = df[df["Payment_Type"] == "Cheque"]["Amount"].sum()
         g_val = df["Amount"].sum()
         
         pdf.set_font("Arial", size=9)
-        pdf.cell(105, 7, "Total Cash Collected:", 1, 0, 'L')
-        pdf.cell(85, 7, f"{c_val:,.0f} MMK", 1, 1, 'R')
+        pdf.cell(110, 6.5, "Total Cash Collected:", 1, 0, 'L')
+        pdf.cell(80, 6.5, f"{c_val:,.0f} MMK", 1, 1, 'R')
         
-        pdf.cell(105, 7, "Total Cheque Received:", 1, 0, 'L')
-        pdf.cell(85, 7, f"{q_val:,.0f} MMK", 1, 1, 'R')
+        pdf.cell(110, 6.5, "Total Cheque Received:", 1, 0, 'L')
+        pdf.cell(80, 6.5, f"{q_val:,.0f} MMK", 1, 1, 'R')
         
         pdf.set_font("Arial", 'B', 9)
-        pdf.cell(105, 7, "Grand Total Collected:", 1, 0, 'L')
-        pdf.cell(85, 7, f"{g_val:,.0f} MMK", 1, 1, 'R')
+        pdf.cell(110, 6.5, "Grand Total Collected:", 1, 0, 'L')
+        pdf.cell(80, 6.5, f"{g_val:,.0f} MMK", 1, 1, 'R')
             
-        # Return Stream Output
         pdf_str = pdf.output(dest='S')
         if isinstance(pdf_str, str):
             return pdf_str.encode('latin-1', errors='replace')
@@ -378,4 +389,4 @@ if not df_cash.empty:
 
 else:
     st.info("💡 လက်ရှိတွင် အချက်အလက် စာရင်းများ မရှိသေးပါ၊ Sidebar က Data Entry Form တွင် စာရင်းသစ် စတင်ထည့်သွင်းနိုင်ပါသည်။")
-                
+                                                                       
