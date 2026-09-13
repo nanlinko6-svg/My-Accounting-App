@@ -3,6 +3,9 @@ import pandas as pd
 import os
 import io
 from fpdf import FPDF
+import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
 
 st.set_page_config(page_title="ERP Collection System", layout="wide")
 
@@ -119,23 +122,152 @@ if not df_cash.empty:
 
     st.markdown("---")
 
-    # Fixed Excel Export Function (Explicit Headers for All Sheets)
+    # High-Quality Styled Excel Export Function with Subtotals and Header Formatting
     def convert_df_to_excel(df):
-        output = io.BytesIO()
-        
-        # Prepare Daily Details Data & Rename Headers
-        detail_df = df[["Date", "Collector", "Customer", "Payment_Type", "Cheque_No", "Amount"]].sort_values(by="Date", ascending=False).copy()
-        detail_df.columns = ["Collection Date", "Collector Name", "Customer Name", "Payment Type", "Cheque No.", "Amount (MMK)"]
-        
-        # Prepare Weekly Summary Data & Rename Headers
-        summary_df = df.groupby(["Year", "Week", "Collector", "Customer", "Payment_Type"])["Amount"].sum().reset_index()
-        summary_df.columns = ["Year", "Week No.", "Collector Name", "Customer Name", "Payment Type", "Total Amount (MMK)"]
+        wb = openpyxl.Workbook()
+        wb.remove(wb.active) # Remove default sheet
 
-        # Write to Excel Sheets
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            summary_df.to_excel(writer, index=False, sheet_name='Weekly_Summary', header=True)
-            detail_df.to_excel(writer, index=False, sheet_name='Daily_Details', header=True)
+        # Styling definitions
+        header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+        header_fill = PatternFill(start_color="1F497D", end_color="1F497D", fill_type="solid") # Dark Navy
+        
+        title_font = Font(name="Calibri", size=14, bold=True, color="1F497D")
+        sub_title_font = Font(name="Calibri", size=10, italic=True, color="595959")
+        
+        subtotal_font = Font(name="Calibri", size=11, bold=True)
+        subtotal_fill = PatternFill(start_color="F2F2F2", end_color="F2F2F2", fill_type="solid")
+        grand_total_fill = PatternFill(start_color="DCE6F1", end_color="DCE6F1", fill_type="solid")
+        
+        thin_border = Border(
+            left=Side(style='thin', color='D9D9D9'),
+            right=Side(style='thin', color='D9D9D9'),
+            top=Side(style='thin', color='D9D9D9'),
+            bottom=Side(style='thin', color='D9D9D9')
+        )
+        total_top_border = Side(style='thin', color='000000')
+        total_bottom_border = Side(style='double', color='000000')
+        grand_total_border = Border(top=total_top_border, bottom=total_bottom_border)
+
+        # -------------------------------------------------------------
+        # SHEET 1: Daily_Details
+        # -------------------------------------------------------------
+        ws_detail = wb.create_sheet(title="Daily_Details")
+        
+        # Main Title Banner inside Sheet
+        ws_detail.cell(row=1, column=1, value="💵 Daily Collection Detail Report").font = title_font
+        ws_detail.cell(row=2, column=1, value="Generated from ERP Daily Collection System").font = sub_title_font
+        
+        # Table Headers
+        headers_detail = ["Collection Date", "Collector Name", "Customer Name", "Payment Type", "Cheque No.", "Amount (MMK)"]
+        header_row_idx = 4
+        for col_idx, h_text in enumerate(headers_detail, 1):
+            cell = ws_detail.cell(row=header_row_idx, column=col_idx, value=h_text)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = Alignment(horizontal="center" if col_idx < 6 else "right", vertical="center")
+
+        # Table Data
+        detail_df = df[["Date", "Collector", "Customer", "Payment_Type", "Cheque_No", "Amount"]].sort_values(by="Date", ascending=False)
+        start_row = 5
+        for row_idx, r_data in enumerate(detail_df.itertuples(index=False), start=start_row):
+            ws_detail.cell(row=row_idx, column=1, value=str(r_data[0])).alignment = Alignment(horizontal="center")
+            ws_detail.cell(row=row_idx, column=2, value=str(r_data[1])).alignment = Alignment(horizontal="left")
+            ws_detail.cell(row=row_idx, column=3, value=str(r_data[2])).alignment = Alignment(horizontal="left")
+            ws_detail.cell(row=row_idx, column=4, value=str(r_data[3])).alignment = Alignment(horizontal="center")
+            ws_detail.cell(row=row_idx, column=5, value=str(r_data[4])).alignment = Alignment(horizontal="center")
             
+            amt_cell = ws_detail.cell(row=row_idx, column=6, value=float(r_data[5]))
+            amt_cell.number_format = '#,##0'
+            amt_cell.alignment = Alignment(horizontal="right")
+            
+            for c in range(1, 7):
+                ws_detail.cell(row=row_idx, column=c).border = thin_border
+
+        end_row = start_row + len(detail_df) - 1
+
+        # Subtotals & Grand Total Rows
+        subtotal_cash_row = end_row + 2
+        ws_detail.cell(row=subtotal_cash_row, column=5, value="Total Cash Collected:").font = subtotal_font
+        ws_detail.cell(row=subtotal_cash_row, column=5).alignment = Alignment(horizontal="right")
+        cash_sum_cell = ws_detail.cell(row=subtotal_cash_row, column=6, value=f"=SUMIF(D{start_row}:D{end_row}, \"Cash\", F{start_row}:F{end_row})")
+        cash_sum_cell.font = subtotal_font
+        cash_sum_cell.number_format = '#,##0'
+        cash_sum_cell.fill = subtotal_fill
+
+        subtotal_chq_row = subtotal_cash_row + 1
+        ws_detail.cell(row=subtotal_chq_row, column=5, value="Total Cheque Received:").font = subtotal_font
+        ws_detail.cell(row=subtotal_chq_row, column=5).alignment = Alignment(horizontal="right")
+        chq_sum_cell = ws_detail.cell(row=subtotal_chq_row, column=6, value=f"=SUMIF(D{start_row}:D{end_row}, \"Cheque\", F{start_row}:F{end_row})")
+        chq_sum_cell.font = subtotal_font
+        chq_sum_cell.number_format = '#,##0'
+        chq_sum_cell.fill = subtotal_fill
+
+        grand_total_row = subtotal_chq_row + 1
+        ws_detail.cell(row=grand_total_row, column=5, value="Grand Total Collected:").font = subtotal_font
+        ws_detail.cell(row=grand_total_row, column=5).alignment = Alignment(horizontal="right")
+        gt_sum_cell = ws_detail.cell(row=grand_total_row, column=6, value=f"=SUM(F{start_row}:F{end_row})")
+        gt_sum_cell.font = subtotal_font
+        gt_sum_cell.number_format = '#,##0'
+        gt_sum_cell.fill = grand_total_fill
+        gt_sum_cell.border = grand_total_border
+        ws_detail.cell(row=grand_total_row, column=5).border = grand_total_border
+
+        # -------------------------------------------------------------
+        # SHEET 2: Weekly_Summary
+        # -------------------------------------------------------------
+        ws_summary = wb.create_sheet(title="Weekly_Summary")
+        
+        ws_summary.cell(row=1, column=1, value="💵 Weekly Settlement Summary").font = title_font
+        ws_summary.cell(row=2, column=1, value="Grouped by Year, Week, Collector & Customer").font = sub_title_font
+        
+        headers_summary = ["Year", "Week No.", "Collector Name", "Customer Name", "Payment Type", "Total Amount (MMK)"]
+        for col_idx, h_text in enumerate(headers_summary, 1):
+            cell = ws_summary.cell(row=header_row_idx, column=col_idx, value=h_text)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = Alignment(horizontal="center" if col_idx < 6 else "right", vertical="center")
+
+        summary_df = df.groupby(["Year", "Week", "Collector", "Customer", "Payment_Type"])["Amount"].sum().reset_index()
+        s_start_row = 5
+        for row_idx, r_data in enumerate(summary_df.itertuples(index=False), start=s_start_row):
+            ws_summary.cell(row=row_idx, column=1, value=int(r_data[0])).alignment = Alignment(horizontal="center")
+            ws_summary.cell(row=row_idx, column=2, value=int(r_data[1])).alignment = Alignment(horizontal="center")
+            ws_summary.cell(row=row_idx, column=3, value=str(r_data[2])).alignment = Alignment(horizontal="left")
+            ws_summary.cell(row=row_idx, column=4, value=str(r_data[3])).alignment = Alignment(horizontal="left")
+            ws_summary.cell(row=row_idx, column=5, value=str(r_data[4])).alignment = Alignment(horizontal="center")
+            
+            s_amt_cell = ws_summary.cell(row=row_idx, column=6, value=float(r_data[5]))
+            s_amt_cell.number_format = '#,##0'
+            s_amt_cell.alignment = Alignment(horizontal="right")
+            
+            for c in range(1, 7):
+                ws_summary.cell(row=row_idx, column=c).border = thin_border
+
+        s_end_row = s_start_row + len(summary_df) - 1
+        
+        # Summary Grand Total Row
+        s_gt_row = s_end_row + 2
+        ws_summary.cell(row=s_gt_row, column=5, value="Grand Total:").font = subtotal_font
+        ws_summary.cell(row=s_gt_row, column=5).alignment = Alignment(horizontal="right")
+        s_gt_sum_cell = ws_summary.cell(row=s_gt_row, column=6, value=f"=SUM(F{s_start_row}:F{s_end_row})")
+        s_gt_sum_cell.font = subtotal_font
+        s_gt_sum_cell.number_format = '#,##0'
+        s_gt_sum_cell.fill = grand_total_fill
+        s_gt_sum_cell.border = grand_total_border
+        ws_summary.cell(row=s_gt_row, column=5).border = grand_total_border
+
+        # Adjust Column Widths dynamically for both sheets
+        for sheet in [ws_detail, ws_summary]:
+            for col in sheet.columns:
+                max_len = 0
+                col_letter = get_column_letter(col[0].column)
+                for cell in col:
+                    if cell.row > 2 and cell.value:
+                        max_len = max(max_len, len(str(cell.value)))
+                sheet.column_dimensions[col_letter].width = max(max_len + 4, 15)
+
+        output = io.BytesIO()
+        wb.save(output)
         return output.getvalue()
 
     # Fixed PDF Generator Function with Summary Totals Section
@@ -246,4 +378,4 @@ if not df_cash.empty:
 
 else:
     st.info("💡 လက်ရှိတွင် အချက်အလက် စာရင်းများ မရှိသေးပါ၊ Sidebar က Data Entry Form တွင် စာရင်းသစ် စတင်ထည့်သွင်းနိုင်ပါသည်။")
-    
+                
