@@ -107,7 +107,6 @@ def convert_df_to_excel(df):
     return output.getvalue()
 
 def generate_pdf_report(df):
-    # A4 Size (210 x 297 mm) Explicit Specification
     pdf = FPDF(orientation='P', unit='mm', format='A4')
     pdf.add_page()
     pdf.set_font("Arial", 'B', 16)
@@ -115,7 +114,7 @@ def generate_pdf_report(df):
     pdf.set_font("Arial", size=10)
     pdf.ln(5)
     
-    # Table Header (Fits A4 width ~ 190mm)
+    # Table Header
     pdf.set_font("Arial", 'B', 9)
     pdf.cell(25, 8, "Date", 1, 0, 'C')
     pdf.cell(35, 8, "Collector", 1, 0, 'C')
@@ -135,7 +134,13 @@ def generate_pdf_report(df):
         pdf.cell(30, 7, str(row['Cheque_No']), 1, 0, 'C')
         pdf.cell(35, 7, f"{row['Amount']:,}", 1, 1, 'R')
         
-    return bytes(pdf.output(dest='S'))
+    # Fixed Compatibility Output Issue for Streamlit Cloud
+    pdf_out = pdf.output()
+    if isinstance(pdf_out, str):
+        return pdf_out.encode('latin-1', errors='replace')
+    elif isinstance(pdf_out, (bytearray, bytes)):
+        return bytes(pdf_out)
+    return pdf_out
 
 # Export Buttons Section
 st.subheader("📥 Export Reports (Excel / A4 PDF)")
@@ -149,13 +154,16 @@ col_ex1.download_button(
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
 
-pdf_data = generate_pdf_report(df_cash)
-col_ex2.download_button(
-    label="📄 Download PDF Report (A4 Standard)",
-    data=pdf_data,
-    file_name="Collection_Report_A4.pdf",
-    mime="application/pdf"
-)
+try:
+    pdf_data = generate_pdf_report(df_cash)
+    col_ex2.download_button(
+        label="📄 Download PDF Report (A4 Standard)",
+        data=pdf_data,
+        file_name="Collection_Report_A4.pdf",
+        mime="application/pdf"
+    )
+except Exception as e:
+    col_ex2.error(f"PDF Generation Error: {e}")
 
 st.markdown("---")
 
