@@ -54,16 +54,10 @@ st.title("💵 Daily Collection & Weekly Settlement System")
 # 2. Database Setup
 cash_file = "cash_collection.csv"
 if not os.path.exists(cash_file):
-    df_cash_init = pd.DataFrame([
-        {"Date": "2026-09-01", "Collector": "Ko Kyaw", "Customer": "City Mart", "Payment_Type": "Cash", "Cheque_No": "-", "Amount": 150000},
-        {"Date": "2026-09-03", "Collector": "Aung Aung", "Customer": "Ocean Store", "Payment_Type": "Cheque", "Cheque_No": "CHQ-998821", "Amount": 200000},
-        {"Date": "2026-09-08", "Collector": "Ko Kyaw", "Customer": "Grand Hotel", "Payment_Type": "Cash", "Cheque_No": "-", "Amount": 180000}
-    ])
+    df_cash_init = pd.DataFrame(columns=["Date", "Collector", "Customer", "Payment_Type", "Cheque_No", "Amount"])
     df_cash_init.to_csv(cash_file, index=False)
 
 df_cash = pd.read_csv(cash_file)
-df_cash["Date"] = pd.to_datetime(df_cash["Date"])
-df_cash["Cheque_No"] = df_cash["Cheque_No"].fillna("-")
 
 # 3. Sidebar - Data Entry Form (Cash / Cheque)
 st.sidebar.header("📥 Daily Collection Entry")
@@ -83,96 +77,125 @@ with st.sidebar.form("cash_entry_form"):
         st.success(f"Saved {pay_type} ({amount:,.0f} MMK) from {customer_name}")
         st.rerun()
 
-# 4. Weekly Calculation Logic
-df_cash["Week"] = df_cash["Date"].dt.isocalendar().week
-df_cash["Year"] = df_cash["Date"].dt.isocalendar().year
-
-# Metrics Overview
-total_cash_val = df_cash[df_cash["Payment_Type"] == "Cash"]["Amount"].sum()
-total_chq_val = df_cash[df_cash["Payment_Type"] == "Cheque"]["Amount"].sum()
-grand_total = df_cash["Amount"].sum()
-
-col1, col2, col3 = st.columns(3)
-col1.metric("Grand Total Collected", f"{grand_total:,.0f} MMK")
-col2.metric("Total Cash Collected", f"{total_cash_val:,.0f} MMK")
-col3.metric("Total Cheque Received", f"{total_chq_val:,.0f} MMK")
-
-st.markdown("---")
-
-# 5. Export Utility Functions (Excel & A4 PDF)
-def convert_df_to_excel(df):
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='Collection_Report')
-    return output.getvalue()
-
-def generate_pdf_report(df):
-    pdf = FPDF(orientation='P', unit='mm', format='A4')
-    pdf.add_page()
-    pdf.set_font("Arial", 'B', 16)
-    pdf.cell(0, 10, "Daily Collection & Settlement Report (A4)", ln=True, align='C')
-    pdf.set_font("Arial", size=10)
-    pdf.ln(5)
+# 4. Sidebar - Delete Specific Row (တစ်ခုချင်းစီ ဖျက်ရန်)
+if not df_cash.empty:
+    st.sidebar.markdown("---")
+    st.sidebar.header("❌ Delete Specific Record")
     
-    # Table Header
-    pdf.set_font("Arial", 'B', 9)
-    pdf.cell(25, 8, "Date", 1, 0, 'C')
-    pdf.cell(35, 8, "Collector", 1, 0, 'C')
-    pdf.cell(45, 8, "Customer", 1, 0, 'C')
-    pdf.cell(20, 8, "Type", 1, 0, 'C')
-    pdf.cell(30, 8, "Cheque No", 1, 0, 'C')
-    pdf.cell(35, 8, "Amount (MMK)", 1, 1, 'C')
+    # Display options with index for user selection
+    delete_options = [f"ID {idx}: {row['Date']} | {row['Collector']} | {row['Customer']} ({row['Amount']:,} MMK)" for idx, row in df_cash.iterrows()]
+    selected_option = st.sidebar.selectbox("Select Record to Delete", delete_options)
     
-    # Table Rows
-    pdf.set_font("Arial", size=9)
-    for _, row in df.iterrows():
-        date_str = pd.to_datetime(row['Date']).strftime('%Y-%m-%d')
-        pdf.cell(25, 7, str(date_str), 1)
-        pdf.cell(35, 7, str(row['Collector'])[:18], 1)
-        pdf.cell(45, 7, str(row['Customer'])[:23], 1)
-        pdf.cell(20, 7, str(row['Payment_Type']), 1, 0, 'C')
-        pdf.cell(30, 7, str(row['Cheque_No']), 1, 0, 'C')
-        pdf.cell(35, 7, f"{row['Amount']:,}", 1, 1, 'R')
+    if st.sidebar.button("🗑 Delete Selected Record"):
+        selected_index = int(selected_option.split(":")[0].replace("ID ", ""))
+        df_cash = df_cash.drop(selected_index).reset_index(drop=True)
+        df_cash.to_csv(cash_file, index=False)
+        st.sidebar.success("Selected record deleted successfully!")
+        st.rerun()
+
+# Processing Calculations if data exists
+if not df_cash.empty:
+    df_cash["Date_dt"] = pd.to_datetime(df_cash["Date"])
+    df_cash["Cheque_No"] = df_cash["Cheque_No"].fillna("-")
+    df_cash["Week"] = df_cash["Date_dt"].dt.isocalendar().week
+    df_cash["Year"] = df_cash["Date_dt"].dt.isocalendar().year
+
+    # Metrics Overview
+    total_cash_val = df_cash[df_cash["Payment_Type"] == "Cash"]["Amount"].sum()
+    total_chq_val = df_cash[df_cash["Payment_Type"] == "Cheque"]["Amount"].sum()
+    grand_total = df_cash["Amount"].sum()
+
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Grand Total Collected", f"{grand_total:,.0f} MMK")
+    col2.metric("Total Cash Collected", f"{total_cash_val:,.0f} MMK")
+    col3.metric("Total Cheque Received", f"{total_chq_val:,.0f} MMK")
+
+    st.markdown("---")
+
+    # Export Functions
+    def convert_df_to_excel(df):
+        output = io.BytesIO()
+        export_df = df[["Date", "Collector", "Customer", "Payment_Type", "Cheque_No", "Amount"]]
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            export_df.to_excel(writer, index=False, sheet_name='Collection_Report')
+        return output.getvalue()
+
+    def generate_pdf_report(df):
+        pdf = FPDF(orientation='P', unit='mm', format='A4')
+        pdf.add_page()
+        pdf.set_font("Arial", 'B', 16)
+        pdf.cell(0, 10, "Daily Collection & Settlement Report (A4)", ln=True, align='C')
+        pdf.set_font("Arial", size=10)
+        pdf.ln(5)
         
-    # Fixed Compatibility Output Issue for Streamlit Cloud
-    pdf_out = pdf.output()
-    if isinstance(pdf_out, str):
-        return pdf_out.encode('latin-1', errors='replace')
-    elif isinstance(pdf_out, (bytearray, bytes)):
-        return bytes(pdf_out)
-    return pdf_out
+        pdf.set_font("Arial", 'B', 9)
+        pdf.cell(25, 8, "Date", 1, 0, 'C')
+        pdf.cell(35, 8, "Collector", 1, 0, 'C')
+        pdf.cell(45, 8, "Customer", 1, 0, 'C')
+        pdf.cell(20, 8, "Type", 1, 0, 'C')
+        pdf.cell(30, 8, "Cheque No", 1, 0, 'C')
+        pdf.cell(35, 8, "Amount (MMK)", 1, 1, 'C')
+        
+        pdf.set_font("Arial", size=9)
+        for _, row in df.iterrows():
+            date_str = pd.to_datetime(row['Date']).strftime('%Y-%m-%d')
+            pdf.cell(25, 7, str(date_str), 1)
+            pdf.cell(35, 7, str(row['Collector'])[:18], 1)
+            pdf.cell(45, 7, str(row['Customer'])[:23], 1)
+            pdf.cell(20, 7, str(row['Payment_Type']), 1, 0, 'C')
+            pdf.cell(30, 7, str(row['Cheque_No']), 1, 0, 'C')
+            pdf.cell(35, 7, f"{row['Amount']:,}", 1, 1, 'R')
+            
+        pdf_out = pdf.output()
+        if isinstance(pdf_out, str):
+            return pdf_out.encode('latin-1', errors='replace')
+        elif isinstance(pdf_out, (bytearray, bytes)):
+            return bytes(pdf_out)
+        return pdf_out
 
-# Export Buttons Section
-st.subheader("📥 Export Reports (Excel / A4 PDF)")
-col_ex1, col_ex2 = st.columns(2)
+    # Export Buttons
+    st.subheader("📥 Export Reports (Excel / A4 PDF)")
+    col_ex1, col_ex2 = st.columns(2)
 
-excel_data = convert_df_to_excel(df_cash)
-col_ex1.download_button(
-    label="📊 Download Excel Report (.xlsx)",
-    data=excel_data,
-    file_name="Collection_Report.xlsx",
-    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-)
-
-try:
-    pdf_data = generate_pdf_report(df_cash)
-    col_ex2.download_button(
-        label="📄 Download PDF Report (A4 Standard)",
-        data=pdf_data,
-        file_name="Collection_Report_A4.pdf",
-        mime="application/pdf"
+    excel_data = convert_df_to_excel(df_cash)
+    col_ex1.download_button(
+        label="📊 Download Excel Report (.xlsx)",
+        data=excel_data,
+        file_name="Collection_Report.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
-except Exception as e:
-    col_ex2.error(f"PDF Generation Error: {e}")
 
-st.markdown("---")
+    try:
+        pdf_data = generate_pdf_report(df_cash)
+        col_ex2.download_button(
+            label="📄 Download PDF Report (A4 Standard)",
+            data=pdf_data,
+            file_name="Collection_Report_A4.pdf",
+            mime="application/pdf"
+        )
+    except Exception as e:
+        col_ex2.error(f"PDF Generation Error: {e}")
 
-# 6. Weekly Summary Table
-st.subheader("📅 Weekly Summary Report (သီတင်းပတ်အလိုက် စာရင်းချုပ်)")
-weekly_summary = df_cash.groupby(["Year", "Week", "Collector", "Customer", "Payment_Type"])["Amount"].sum().reset_index()
-weekly_summary.columns = ["Year", "Week No.", "Collector Name", "Customer Name", "Payment Type", "Total Amount (MMK)"]
-st.dataframe(weekly_summary, use_container_width=True)
+    st.markdown("---")
 
-# 7. Daily Transaction Log Table
-st.subheader("📝 Daily Transaction Detail Logs")
-st.dataframe(df_cash[["Date", "Collector", "Customer", "Payment_Type", "Cheque_No", "Amount"]].sort_values(by="Date", ascending=False), use_container_width=True)
+    # 5. Weekly Summary Table
+    st.subheader("📅 Weekly Summary Report (သီတင်းပတ်အလိုက် စာရင်းချုပ်)")
+    weekly_summary = df_cash.groupby(["Year", "Week", "Collector", "Customer", "Payment_Type"])["Amount"].sum().reset_index()
+    weekly_summary.columns = ["Year", "Week No.", "Collector Name", "Customer Name", "Payment Type", "Total Amount (MMK)"]
+    st.dataframe(weekly_summary, use_container_width=True)
+
+    # 6. Interactive Editable Daily Logs Table (တိုက်ရိုက် စာရင်းပြင်ရန်)
+    st.subheader("📝 Daily Transaction Detail Logs (Editable)")
+    st.info("💡 ဇယားထဲတွင် ကလစ်နှိပ်၍ အချက်အလက်များ တိုက်ရိုက်ပြင်ဆင်နိုင်ပါသည် (ပြင်ဆင်ပြီးပါက အောက်ပါ Save Button ကို နှိပ်ပါ)")
+    
+    editable_df = df_cash[["Date", "Collector", "Customer", "Payment_Type", "Cheque_No", "Amount"]].copy()
+    edited_df = st.data_editor(editable_df, num_rows="dynamic", use_container_width=True, key="data_editor")
+
+    if st.button("💾 Save Table Edits"):
+        edited_df.to_csv(cash_file, index=False)
+        st.success("Changes saved successfully!")
+        st.rerun()
+
+else:
+    st.info("💡 လက်ရှိတွင် အချက်အလက် စာရင်းများ မရှိသေးပါ၊ Sidebar က Data Entry Form တွင် စာရင်းသစ် စတင်ထည့်သွင်းနိုင်ပါသည်။")
+    
