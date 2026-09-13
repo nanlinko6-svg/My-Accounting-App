@@ -94,7 +94,7 @@ if not df_cash.empty:
 
 # Processing Calculations if data exists
 if not df_cash.empty:
-    df_cash["Date_dt"] = pd.to_datetime(df_cash["Date"])
+    df_cash["Date_dt"] = pd.to_datetime(df_cash["Date"], errors='coerce')
     df_cash["Cheque_No"] = df_cash["Cheque_No"].fillna("-")
     df_cash["Week"] = df_cash["Date_dt"].dt.isocalendar().week
     df_cash["Year"] = df_cash["Date_dt"].dt.isocalendar().year
@@ -124,7 +124,7 @@ if not df_cash.empty:
             
         return output.getvalue()
 
-    # Fixed PDF Generator Function
+    # Fixed PDF Generator Function (Safe Date Handling)
     def generate_pdf_report(df):
         pdf = FPDF(orientation='P', unit='mm', format='A4')
         pdf.add_page()
@@ -143,7 +143,8 @@ if not df_cash.empty:
         
         pdf.set_font("Arial", size=9)
         for _, row in df.iterrows():
-            date_str = pd.to_datetime(row['Date']).strftime('%Y-%m-%d')
+            # Safe String conversion for Date
+            date_str = str(row['Date'])[:10] if pd.notna(row['Date']) else "-"
             pdf.cell(25, 7, str(date_str), 1)
             pdf.cell(35, 7, str(row['Collector'])[:18], 1)
             pdf.cell(45, 7, str(row['Customer'])[:23], 1)
@@ -151,7 +152,6 @@ if not df_cash.empty:
             pdf.cell(30, 7, str(row['Cheque_No']), 1, 0, 'C')
             pdf.cell(35, 7, f"{row['Amount']:,}", 1, 1, 'R')
             
-        # Standard bytes conversion across fpdf / fpdf2
         out = pdf.output()
         if isinstance(out, str):
             return out.encode('latin-1', errors='replace')
