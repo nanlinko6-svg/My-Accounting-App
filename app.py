@@ -82,7 +82,6 @@ if not df_cash.empty:
     st.sidebar.markdown("---")
     st.sidebar.header("❌ Delete Specific Record")
     
-    # Display options with index for user selection
     delete_options = [f"ID {idx}: {row['Date']} | {row['Collector']} | {row['Customer']} ({row['Amount']:,} MMK)" for idx, row in df_cash.iterrows()]
     selected_option = st.sidebar.selectbox("Select Record to Delete", delete_options)
     
@@ -112,14 +111,20 @@ if not df_cash.empty:
 
     st.markdown("---")
 
-    # Export Functions
+    # Multi-Tab Excel Export Function (Summary & Detail Sheets)
     def convert_df_to_excel(df):
         output = io.BytesIO()
-        export_df = df[["Date", "Collector", "Customer", "Payment_Type", "Cheque_No", "Amount"]]
+        detail_df = df[["Date", "Collector", "Customer", "Payment_Type", "Cheque_No", "Amount"]].sort_values(by="Date", ascending=False)
+        summary_df = df.groupby(["Year", "Week", "Collector", "Customer", "Payment_Type"])["Amount"].sum().reset_index()
+        summary_df.columns = ["Year", "Week No.", "Collector Name", "Customer Name", "Payment Type", "Total Amount (MMK)"]
+
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            export_df.to_excel(writer, index=False, sheet_name='Collection_Report')
+            summary_df.to_excel(writer, index=False, sheet_name='Weekly_Summary')
+            detail_df.to_excel(writer, index=False, sheet_name='Daily_Details')
+            
         return output.getvalue()
 
+    # Fixed PDF Generator Function
     def generate_pdf_report(df):
         pdf = FPDF(orientation='P', unit='mm', format='A4')
         pdf.add_page()
@@ -146,35 +151,34 @@ if not df_cash.empty:
             pdf.cell(30, 7, str(row['Cheque_No']), 1, 0, 'C')
             pdf.cell(35, 7, f"{row['Amount']:,}", 1, 1, 'R')
             
-        pdf_out = pdf.output()
-        if isinstance(pdf_out, str):
-            return pdf_out.encode('latin-1', errors='replace')
-        elif isinstance(pdf_out, (bytearray, bytes)):
-            return bytes(pdf_out)
-        return pdf_out
+        # Standard bytes conversion across fpdf / fpdf2
+        out = pdf.output()
+        if isinstance(out, str):
+            return out.encode('latin-1', errors='replace')
+        return bytes(out)
 
     # Export Buttons
-    st.subheader("📥 Export Reports (Excel / A4 PDF)")
+    st.subheader("📥 Export Reports (Excel Multi-Sheet / A4 PDF)")
     col_ex1, col_ex2 = st.columns(2)
 
     excel_data = convert_df_to_excel(df_cash)
     col_ex1.download_button(
-        label="📊 Download Excel Report (.xlsx)",
+        label="📊 Download Excel Report (Summary & Detail Sheets)",
         data=excel_data,
         file_name="Collection_Report.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
     try:
-        pdf_data = generate_pdf_report(df_cash)
+        pdf_bytes = generate_pdf_report(df_cash)
         col_ex2.download_button(
             label="📄 Download PDF Report (A4 Standard)",
-            data=pdf_data,
+            data=pdf_bytes,
             file_name="Collection_Report_A4.pdf",
             mime="application/pdf"
         )
     except Exception as e:
-        col_ex2.error(f"PDF Generation Error: {e}")
+        col_ex2.error(f"⚠️ PDF အဆင်မပြေပါ: {e}")
 
     st.markdown("---")
 
@@ -184,7 +188,7 @@ if not df_cash.empty:
     weekly_summary.columns = ["Year", "Week No.", "Collector Name", "Customer Name", "Payment Type", "Total Amount (MMK)"]
     st.dataframe(weekly_summary, use_container_width=True)
 
-    # 6. Interactive Editable Daily Logs Table (တိုက်ရိုက် စာရင်းပြင်ရန်)
+    # 6. Interactive Editable Daily Logs Table
     st.subheader("📝 Daily Transaction Detail Logs (Editable)")
     st.info("💡 ဇယားထဲတွင် ကလစ်နှိပ်၍ အချက်အလက်များ တိုက်ရိုက်ပြင်ဆင်နိုင်ပါသည် (ပြင်ဆင်ပြီးပါက အောက်ပါ Save Button ကို နှိပ်ပါ)")
     
@@ -198,4 +202,4 @@ if not df_cash.empty:
 
 else:
     st.info("💡 လက်ရှိတွင် အချက်အလက် စာရင်းများ မရှိသေးပါ၊ Sidebar က Data Entry Form တွင် စာရင်းသစ် စတင်ထည့်သွင်းနိုင်ပါသည်။")
-    
+        
