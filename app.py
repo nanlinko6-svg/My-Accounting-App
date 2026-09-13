@@ -359,8 +359,7 @@ if not df_cash.empty:
         pdf.cell(80, 6.5, f"{g_val:,.0f} MMK", 1, 1, 'R', fill=True)
             
         # Proper Byte Stream Output for Streamlit
-        return bytes(pdf.output())
-
+        return pdf.output(dest='S').encode('latin1')
     # Export Buttons
     st.subheader("📥 Export Reports (Excel Multi-Sheet / A4 PDF)")
     col_ex1, col_ex2 = st.columns(2)
