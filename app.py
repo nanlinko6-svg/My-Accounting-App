@@ -82,20 +82,28 @@ if not df_cash.empty:
     st.sidebar.markdown("---")
     st.sidebar.header("❌ Delete Specific Record")
     
-    delete_options = [f"ID {idx}: {row['Date']} | {row['Collector']} | {row['Customer']} ({row['Amount']:,} MMK)" for idx, row in df_cash.iterrows()]
-    selected_option = st.sidebar.selectbox("Select Record to Delete", delete_options)
+    valid_delete_df = df_cash.dropna(subset=["Collector", "Amount"])
+    delete_options = [f"ID {idx}: {row['Date']} | {row['Collector']} | {row['Customer']} ({row['Amount']:,} MMK)" for idx, row in valid_delete_df.iterrows()]
     
-    if st.sidebar.button("🗑 Delete Selected Record"):
-        selected_index = int(selected_option.split(":")[0].replace("ID ", ""))
-        df_cash = df_cash.drop(selected_index).reset_index(drop=True)
-        df_cash.to_csv(cash_file, index=False)
-        st.sidebar.success("Selected record deleted successfully!")
-        st.rerun()
+    if delete_options:
+        selected_option = st.sidebar.selectbox("Select Record to Delete", delete_options)
+        if st.sidebar.button("🗑 Delete Selected Record"):
+            selected_index = int(selected_option.split(":")[0].replace("ID ", ""))
+            df_cash = df_cash.drop(selected_index).reset_index(drop=True)
+            df_cash.to_csv(cash_file, index=False)
+            st.sidebar.success("Selected record deleted successfully!")
+            st.rerun()
 
 # Processing Calculations if data exists
 if not df_cash.empty:
+    # Clean NaN values
+    df_cash = df_cash.dropna(subset=["Amount"]).reset_index(drop=True)
+    df_cash["Amount"] = pd.to_numeric(df_cash["Amount"], errors='coerce').fillna(0)
     df_cash["Date_dt"] = pd.to_datetime(df_cash["Date"], errors='coerce')
     df_cash["Cheque_No"] = df_cash["Cheque_No"].fillna("-")
+    df_cash["Collector"] = df_cash["Collector"].fillna("-")
+    df_cash["Customer"] = df_cash["Customer"].fillna("-")
+    df_cash["Payment_Type"] = df_cash["Payment_Type"].fillna("Cash")
     df_cash["Week"] = df_cash["Date_dt"].dt.isocalendar().week
     df_cash["Year"] = df_cash["Date_dt"].dt.isocalendar().year
 
@@ -111,29 +119,35 @@ if not df_cash.empty:
 
     st.markdown("---")
 
-    # Multi-Tab Excel Export Function with Clear Headers
+    # Fixed Excel Export Function (Explicit Headers for All Sheets)
     def convert_df_to_excel(df):
         output = io.BytesIO()
-        detail_df = df[["Date", "Collector", "Customer", "Payment_Type", "Cheque_No", "Amount"]].sort_values(by="Date", ascending=False)
+        
+        # Prepare Daily Details Data & Rename Headers
+        detail_df = df[["Date", "Collector", "Customer", "Payment_Type", "Cheque_No", "Amount"]].sort_values(by="Date", ascending=False).copy()
         detail_df.columns = ["Collection Date", "Collector Name", "Customer Name", "Payment Type", "Cheque No.", "Amount (MMK)"]
         
+        # Prepare Weekly Summary Data & Rename Headers
         summary_df = df.groupby(["Year", "Week", "Collector", "Customer", "Payment_Type"])["Amount"].sum().reset_index()
         summary_df.columns = ["Year", "Week No.", "Collector Name", "Customer Name", "Payment Type", "Total Amount (MMK)"]
 
+        # Write to Excel Sheets
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             summary_df.to_excel(writer, index=False, sheet_name='Weekly_Summary', header=True)
             detail_df.to_excel(writer, index=False, sheet_name='Daily_Details', header=True)
             
         return output.getvalue()
 
-    # Fixed PDF Generator Function (Correct Binary Stream Output)
+    # Fixed PDF Generator Function with Summary Totals Section
     def generate_pdf_report(df):
         pdf = FPDF(orientation='P', unit='mm', format='A4')
         pdf.add_page()
+        
+        # Header Title
         pdf.set_font("Arial", 'B', 16)
         pdf.cell(0, 10, "Daily Collection & Settlement Report (A4)", ln=True, align='C')
         pdf.set_font("Arial", size=10)
-        pdf.ln(5)
+        pdf.ln(3)
         
         # Table Headers
         pdf.set_font("Arial", 'B', 9)
@@ -152,7 +166,7 @@ if not df_cash.empty:
             customer_str = str(row['Customer'])[:23]
             pay_type_str = str(row['Payment_Type'])
             cheque_str = str(row['Cheque_No'])
-            amt_str = f"{row['Amount']:,}"
+            amt_str = f"{row['Amount']:,.0f}"
 
             pdf.cell(25, 7, date_str, 1, 0, 'C')
             pdf.cell(35, 7, collector_str, 1, 0, 'L')
@@ -161,7 +175,27 @@ if not df_cash.empty:
             pdf.cell(30, 7, cheque_str, 1, 0, 'C')
             pdf.cell(35, 7, amt_str, 1, 1, 'R')
             
-        # Return proper bytes using String stream output
+        # Summary Section at Bottom of PDF
+        pdf.ln(6)
+        pdf.set_font("Arial", 'B', 10)
+        pdf.cell(0, 7, "Collection Summary Totals:", 0, 1, 'L')
+        
+        c_val = df[df["Payment_Type"] == "Cash"]["Amount"].sum()
+        q_val = df[df["Payment_Type"] == "Cheque"]["Amount"].sum()
+        g_val = df["Amount"].sum()
+        
+        pdf.set_font("Arial", size=9)
+        pdf.cell(105, 7, "Total Cash Collected:", 1, 0, 'L')
+        pdf.cell(85, 7, f"{c_val:,.0f} MMK", 1, 1, 'R')
+        
+        pdf.cell(105, 7, "Total Cheque Received:", 1, 0, 'L')
+        pdf.cell(85, 7, f"{q_val:,.0f} MMK", 1, 1, 'R')
+        
+        pdf.set_font("Arial", 'B', 9)
+        pdf.cell(105, 7, "Grand Total Collected:", 1, 0, 'L')
+        pdf.cell(85, 7, f"{g_val:,.0f} MMK", 1, 1, 'R')
+            
+        # Return Stream Output
         pdf_str = pdf.output(dest='S')
         if isinstance(pdf_str, str):
             return pdf_str.encode('latin-1', errors='replace')
