@@ -12,11 +12,11 @@ st.set_page_config(page_title="ERP Collection System", layout="wide")
 # 1. Multi-User Credentials List (6 Users)
 USERS = {
     "admin": "Admin@1562000",
-    "finance1": "Fin1@123",
-    "finance2": "Fin2@123",
-    "finance3": "Fin3@123",
-    "finance4": "Fin4@123",
-    "finance5": "Fin5@123"
+    "finance1": "Fin1@1235",
+    "finance2": "Fin2@1236",
+    "finance3": "Fin3@1237",
+    "finance4": "Fin4@1238",
+    "finance5": "Fin5@1239"
 }
 
 # User Authentication System
